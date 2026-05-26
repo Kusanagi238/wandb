@@ -1,6 +1,9 @@
+import functools
+import multiprocessing
 import pathlib
 
 import pytest
+import wandb
 
 
 @pytest.mark.parametrize(
@@ -27,3 +30,27 @@ def test_share_child_base(
         config = snapshot.config(run_id=run_id)
         assert config["c1"]["value"] == 11
         assert config["c2"]["value"] == 22
+
+
+def _log_and_read_step(run: wandb.Run, value: str) -> int:
+    run.log({"value": value})
+    return run.step
+
+
+def test_attach_step():
+    """Test the value of run.step in attached runs."""
+    with (
+        wandb.init(mode="offline") as run,
+        multiprocessing.Pool() as pool,
+    ):
+        steps = pool.map(
+            functools.partial(_log_and_read_step, run),
+            ("logger1", "logger2"),
+        )
+
+    # `run.step` happens after 1 `log()` in both cases:
+    assert steps[0] >= 1
+    assert steps[1] >= 1
+
+    # `run.step` happens after 2 `log()` in at least one of the cases:
+    assert 2 in steps
